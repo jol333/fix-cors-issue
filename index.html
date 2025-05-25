@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Recraft Vectorization Proxy</title>
+</head>
+<body>
+  <p id="status">Waiting for image from Figma plugin…</p>
+<script>
+  // 1) Put your Recraft API key here:
+  const RECRAFT_API_KEY = 'DNoqIo2bVJMRz3UH3E31NBBtMhnNq8NkffShq20b3MqBWfwXv05jkD1Yr1HyjbGx';
+
+  // 2) Tell the plugin we’re up and running:
+  parent.postMessage({ pluginMessage: { type: 'proxy-ready' } }, '*');
+
+  // 3) Listen for the image data from the plugin:
+  window.onmessage = async (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === 'vectorize-image') {
+      document.getElementById('status').textContent = 'Vectorizing…';
+
+      try {
+        // Decode base64 → binary
+        const b64 = msg.imageDataBase64;
+        const bin = atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) {
+          arr[i] = bin.charCodeAt(i);
+        }
+        // Turn into a Blob and build FormData
+        const blob = new Blob([arr], { type: 'image/png' });
+        const form = new FormData();
+        form.append('file', blob, msg.filename || 'image.png');
+        form.append('response_format', 'url');
+        // optional: form.append('style', msg.style || 'vector_illustration');
+
+        // 4) Call Recraft API
+        const res = await fetch(
+          'https://external.api.recraft.ai/v1/images/vectorize',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${RECRAFT_API_KEY}`
+            },
+            body: form
+          }
+        );
+        if (!res.ok) throw new Error(await res.text());
+        const json = await res.json();
+
+        // 5) Send the SVG URL back to the plugin
+        parent.postMessage({
+          pluginMessage: {
+            type: 'vectorize-result',
+            url: json.image.url
+          }
+        }, '*');
+        document.getElementById('status').textContent = 'Done!';
+
+      } catch (err) {
+        parent.postMessage({
+          pluginMessage: {
+            type: 'vectorize-error',
+            error: err.message
+          }
+        }, '*');
+        document.getElementById('status').textContent =
+          'Error: ' + err.message;
+      }
+    }
+  };
+</script>
+</body>
+</html>
