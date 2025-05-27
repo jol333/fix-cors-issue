@@ -2,75 +2,189 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Recraft Vectorization Proxy</title>
+  <title>API Proxy for Figma Plugin</title>
 </head>
 <body>
-  <p id="status">Waiting for image from Figma plugin…</p>
+  <p id="status">Waiting for requests from Figma plugin…</p>
 <script>
-  // 1) Put your Recraft API key here:
-  const RECRAFT_API_KEY = 'DNoqIo2bVJMRz3UH3E31NBBtMhnNq8NkffShq20b3MqBWfwXv05jkD1Yr1HyjbGx';
-
-  // 2) Tell the plugin we’re up and running:
+  // Tell the plugin we're up and running
   parent.postMessage({ pluginMessage: { type: 'proxy-ready' } }, '*');
 
-  // 3) Listen for the image data from the plugin:
+  // Listen for requests from the plugin
   window.onmessage = async (event) => {
     const msg = event.data.pluginMessage;
     if (!msg) return;
 
-    if (msg.type === 'vectorize-image') {
-      document.getElementById('status').textContent = 'Vectorizing…';
+    const statusEl = document.getElementById('status');
 
-      try {
-        // Decode base64 → binary
-        const b64 = msg.imageDataBase64;
-        const bin = atob(b64);
-        const arr = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) {
-          arr[i] = bin.charCodeAt(i);
-        }
-        // Turn into a Blob and build FormData
-        const blob = new Blob([arr], { type: 'image/png' });
-        const form = new FormData();
-        form.append('file', blob, msg.filename || 'image.png');
-        form.append('response_format', 'url');
-        // optional: form.append('style', msg.style || 'vector_illustration');
-
-        // 4) Call Recraft API
-        const res = await fetch(
-          'https://external.api.recraft.ai/v1/images/vectorize',
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${RECRAFT_API_KEY}`
-            },
-            body: form
-          }
-        );
-        if (!res.ok) throw new Error(await res.text());
-        const json = await res.json();
-
-        // 5) Send the SVG URL back to the plugin
-        parent.postMessage({
-          pluginMessage: {
-            type: 'vectorize-result',
-            url: json.image.url
-          }
-        }, '*');
-        document.getElementById('status').textContent = 'Done!';
-
-      } catch (err) {
-        parent.postMessage({
-          pluginMessage: {
-            type: 'vectorize-error',
-            error: err.message
-          }
-        }, '*');
-        document.getElementById('status').textContent =
-          'Error: ' + err.message;
+    try {
+      switch (msg.type) {
+        case 'fal-submit-request':
+          await handleFalSubmitRequest(msg, statusEl);
+          break;
+        
+        case 'fal-check-status':
+          await handleFalCheckStatus(msg, statusEl);
+          break;
+        
+        case 'fal-get-result':
+          await handleFalGetResult(msg, statusEl);
+          break;
+        
+        case 'vectorize-image':
+          await handleVectorizeImage(msg, statusEl);
+          break;
+        
+        default:
+          throw new Error(`Unknown request type: ${msg.type}`);
       }
+    } catch (err) {
+      statusEl.textContent = 'Error: ' + err.message;
+      parent.postMessage({
+        pluginMessage: {
+          type: msg.type.replace('-', '-error-').replace('request', 'error'),
+          error: err.message
+        }
+      }, '*');
     }
   };
+
+  // Handle FAL API submit request
+  async function handleFalSubmitRequest(msg, statusEl) {
+    statusEl.textContent = 'Submitting image generation request…';
+    
+    const response = await fetch(msg.url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${msg.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(msg.body)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`FAL API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    
+    parent.postMessage({
+      pluginMessage: {
+        type: 'fal-submit-success',
+        result: result
+      }
+    }, '*');
+    
+    statusEl.textContent = 'Request submitted successfully';
+  }
+
+  // Handle FAL API status check
+  async function handleFalCheckStatus(msg, statusEl) {
+    statusEl.textContent = 'Checking generation status…';
+    
+    const response = await fetch(msg.url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Key ${msg.apiKey}`,
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`FAL status check failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    
+    parent.postMessage({
+      pluginMessage: {
+        type: 'fal-status-success',
+        result: result
+      }
+    }, '*');
+    
+    statusEl.textContent = 'Status checked successfully';
+  }
+
+  // Handle FAL API get result
+  async function handleFalGetResult(msg, statusEl) {
+    statusEl.textContent = 'Fetching generation result…';
+    
+    const response = await fetch(msg.url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Key ${msg.apiKey}`,
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`FAL result fetch failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    
+    parent.postMessage({
+      pluginMessage: {
+        type: 'fal-result-success',
+        result: result
+      }
+    }, '*');
+    
+    statusEl.textContent = 'Result fetched successfully';
+  }
+
+  // Handle Recraft vectorization
+  async function handleVectorizeImage(msg, statusEl) {
+    statusEl.textContent = 'Vectorizing image…';
+
+    // Decode base64 → binary
+    const b64 = msg.imageDataBase64;
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    
+    // Turn into a Blob and build FormData
+    const blob = new Blob([arr], { type: 'image/png' });
+    const form = new FormData();
+    form.append('file', blob, msg.filename || 'image.png');
+    form.append('response_format', 'url');
+    if (msg.style) {
+      form.append('style', msg.style);
+    }
+
+    // Call Recraft API
+    const response = await fetch(
+      'https://external.api.recraft.ai/v1/images/vectorize',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${msg.apiKey}`
+        },
+        body: form
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Recraft API failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const json = await response.json();
+
+    // Send the SVG URL back to the plugin
+    parent.postMessage({
+      pluginMessage: {
+        type: 'vectorize-result',
+        url: json.image.url
+      }
+    }, '*');
+    
+    statusEl.textContent = 'Vectorization completed!';
+  }
 </script>
 </body>
 </html>
