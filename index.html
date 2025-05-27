@@ -16,23 +16,24 @@
     if (!msg) return;
 
     const statusEl = document.getElementById('status');
+    const requestId = msg.requestId; // Extract requestId from message
 
     try {
       switch (msg.type) {
         case 'fal-submit-request':
-          await handleFalSubmitRequest(msg, statusEl);
+          await handleFalSubmitRequest(msg, statusEl, requestId);
           break;
         
         case 'fal-check-status':
-          await handleFalCheckStatus(msg, statusEl);
+          await handleFalCheckStatus(msg, statusEl, requestId);
           break;
         
         case 'fal-get-result':
-          await handleFalGetResult(msg, statusEl);
+          await handleFalGetResult(msg, statusEl, requestId);
           break;
         
         case 'vectorize-image':
-          await handleVectorizeImage(msg, statusEl);
+          await handleVectorizeImage(msg, statusEl, requestId);
           break;
         
         default:
@@ -42,7 +43,8 @@
       statusEl.textContent = 'Error: ' + err.message;
       parent.postMessage({
         pluginMessage: {
-          type: msg.type.replace('-', '-error-').replace('request', 'error'),
+          type: 'error',
+          requestId: requestId,
           error: err.message
         }
       }, '*');
@@ -50,7 +52,7 @@
   };
 
   // Handle FAL API submit request
-  async function handleFalSubmitRequest(msg, statusEl) {
+  async function handleFalSubmitRequest(msg, statusEl, requestId) {
     statusEl.textContent = 'Submitting image generation request…';
     
     const response = await fetch(msg.url, {
@@ -72,6 +74,7 @@
     parent.postMessage({
       pluginMessage: {
         type: 'fal-submit-success',
+        requestId: requestId,
         result: result
       }
     }, '*');
@@ -80,7 +83,7 @@
   }
 
   // Handle FAL API status check
-  async function handleFalCheckStatus(msg, statusEl) {
+  async function handleFalCheckStatus(msg, statusEl, requestId) {
     statusEl.textContent = 'Checking generation status…';
     
     const response = await fetch(msg.url, {
@@ -100,6 +103,7 @@
     parent.postMessage({
       pluginMessage: {
         type: 'fal-status-success',
+        requestId: requestId,
         result: result
       }
     }, '*');
@@ -108,7 +112,7 @@
   }
 
   // Handle FAL API get result
-  async function handleFalGetResult(msg, statusEl) {
+  async function handleFalGetResult(msg, statusEl, requestId) {
     statusEl.textContent = 'Fetching generation result…';
     
     const response = await fetch(msg.url, {
@@ -128,6 +132,7 @@
     parent.postMessage({
       pluginMessage: {
         type: 'fal-result-success',
+        requestId: requestId,
         result: result
       }
     }, '*');
@@ -136,7 +141,7 @@
   }
 
   // Handle Recraft vectorization
-  async function handleVectorizeImage(msg, statusEl) {
+  async function handleVectorizeImage(msg, statusEl, requestId) {
     statusEl.textContent = 'Vectorizing image…';
 
     // Decode base64 → binary
@@ -178,8 +183,9 @@
     // Send the SVG URL back to the plugin
     parent.postMessage({
       pluginMessage: {
-        type: 'vectorize-result',
-        url: json.image.url
+        type: 'vectorize-success',
+        requestId: requestId,
+        result: { url: json.image.url }
       }
     }, '*');
     
