@@ -16,7 +16,7 @@
     if (!msg) return;
 
     const statusEl = document.getElementById('status');
-    const requestId = msg.requestId; // Extract requestId from message
+    const requestId = msg.requestId;
 
     try {
       switch (msg.type) {
@@ -51,11 +51,27 @@
     }
   };
 
+  // Generic fetch function with proper error handling
+  async function makeRequest(url, options = {}) {
+    const response = await fetch(url, {
+      ...options,
+      mode: 'cors',
+      credentials: 'omit'
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    return response.json();
+  }
+
   // Handle FAL API submit request
   async function handleFalSubmitRequest(msg, statusEl, requestId) {
     statusEl.textContent = 'Submitting image generation request…';
     
-    const response = await fetch(msg.url, {
+    const result = await makeRequest(msg.url, {
       method: 'POST',
       headers: {
         'Authorization': `Key ${msg.apiKey}`,
@@ -63,13 +79,6 @@
       },
       body: JSON.stringify(msg.body)
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`FAL API request failed: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-
-    const result = await response.json();
     
     parent.postMessage({
       pluginMessage: {
@@ -86,19 +95,12 @@
   async function handleFalCheckStatus(msg, statusEl, requestId) {
     statusEl.textContent = 'Checking generation status…';
     
-    const response = await fetch(msg.url, {
+    const result = await makeRequest(msg.url, {
       method: 'GET',
       headers: {
         'Authorization': `Key ${msg.apiKey}`,
       }
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`FAL status check failed: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-
-    const result = await response.json();
     
     parent.postMessage({
       pluginMessage: {
@@ -115,19 +117,12 @@
   async function handleFalGetResult(msg, statusEl, requestId) {
     statusEl.textContent = 'Fetching generation result…';
     
-    const response = await fetch(msg.url, {
+    const result = await makeRequest(msg.url, {
       method: 'GET',
       headers: {
         'Authorization': `Key ${msg.apiKey}`,
       }
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`FAL result fetch failed: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-
-    const result = await response.json();
     
     parent.postMessage({
       pluginMessage: {
@@ -169,7 +164,9 @@
         headers: {
           'Authorization': `Bearer ${msg.apiKey}`
         },
-        body: form
+        body: form,
+        mode: 'cors',
+        credentials: 'omit'
       }
     );
 
