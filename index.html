@@ -7,9 +7,6 @@
 <body>
   <p id="status">Waiting for image from Figma plugin…</p>
 <script>
-  // API key will be received from the plugin for security
-  let RECRAFT_API_KEY = null;
-
   // Tell the plugin we're up and running
   parent.postMessage({ pluginMessage: { type: 'proxy-ready' } }, '*');
 
@@ -22,15 +19,15 @@
       document.getElementById('status').textContent = 'Vectorizing…';
 
       try {
-        // Receive API key from plugin payload
-        RECRAFT_API_KEY = msg.payload?.apiKey;
+        // Get the API key from the message sent by the plugin
+        const RECRAFT_API_KEY = msg.recraftApiKey;
         
         if (!RECRAFT_API_KEY) {
-          throw new Error('API key not provided by plugin');
+          throw new Error('No API key provided by the plugin');
         }
 
         // Decode base64 → binary
-        const b64 = msg.payload.imageDataBase64;
+        const b64 = msg.imageDataBase64;
         const bin = atob(b64);
         const arr = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) {
@@ -40,12 +37,11 @@
         // Turn into a Blob and build FormData
         const blob = new Blob([arr], { type: 'image/png' });
         const form = new FormData();
-        form.append('file', blob, msg.payload.filename || 'image.png');
+        form.append('file', blob, msg.filename || 'image.png');
         form.append('response_format', 'url');
-        
-        // Optional: form.append('style', msg.payload.style || 'vector_illustration');
+        // optional: form.append('style', msg.style || 'vector_illustration');
 
-        // Call Recraft API with the key received from plugin
+        // Call Recraft API with the key received from the plugin
         const res = await fetch(
           'https://external.api.recraft.ai/v1/images/vectorize',
           {
@@ -67,11 +63,8 @@
         // Send the SVG URL back to the plugin
         parent.postMessage({
           pluginMessage: {
-            type: 'proxy-message',
-            messageType: 'vectorize-result',
-            data: {
-              url: json.image.url
-            }
+            type: 'vectorize-result',
+            url: json.image.url
           }
         }, '*');
         
@@ -80,19 +73,12 @@
       } catch (err) {
         parent.postMessage({
           pluginMessage: {
-            type: 'proxy-message',
-            messageType: 'vectorize-error',
-            data: {
-              error: err.message
-            }
+            type: 'vectorize-error',
+            error: err.message
           }
         }, '*');
         
-        document.getElementById('status').textContent =
-          'Error: ' + err.message;
-      } finally {
-        // Clear the API key from memory for security
-        RECRAFT_API_KEY = null;
+        document.getElementById('status').textContent = 'Error: ' + err.message;
       }
     }
   };
