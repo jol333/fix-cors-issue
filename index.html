@@ -22,15 +22,15 @@
       document.getElementById('status').textContent = 'Vectorizing…';
 
       try {
-        // Receive API key from plugin
-        RECRAFT_API_KEY = msg.apiKey;
+        // Receive API key from plugin payload
+        RECRAFT_API_KEY = msg.payload?.apiKey;
         
         if (!RECRAFT_API_KEY) {
           throw new Error('API key not provided by plugin');
         }
 
         // Decode base64 → binary
-        const b64 = msg.imageDataBase64;
+        const b64 = msg.payload.imageDataBase64;
         const bin = atob(b64);
         const arr = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) {
@@ -40,10 +40,10 @@
         // Turn into a Blob and build FormData
         const blob = new Blob([arr], { type: 'image/png' });
         const form = new FormData();
-        form.append('file', blob, msg.filename || 'image.png');
+        form.append('file', blob, msg.payload.filename || 'image.png');
         form.append('response_format', 'url');
         
-        // Optional: form.append('style', msg.style || 'vector_illustration');
+        // Optional: form.append('style', msg.payload.style || 'vector_illustration');
 
         // Call Recraft API with the key received from plugin
         const res = await fetch(
@@ -67,8 +67,11 @@
         // Send the SVG URL back to the plugin
         parent.postMessage({
           pluginMessage: {
-            type: 'vectorize-result',
-            url: json.image.url
+            type: 'proxy-message',
+            messageType: 'vectorize-result',
+            data: {
+              url: json.image.url
+            }
           }
         }, '*');
         
@@ -77,8 +80,11 @@
       } catch (err) {
         parent.postMessage({
           pluginMessage: {
-            type: 'vectorize-error',
-            error: err.message
+            type: 'proxy-message',
+            messageType: 'vectorize-error',
+            data: {
+              error: err.message
+            }
           }
         }, '*');
         
